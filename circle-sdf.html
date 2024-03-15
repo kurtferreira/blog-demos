@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDF Circle</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #glCanvas {
+            margin:0 auto; 
+        }
+    </style>
+</head>
+<body>
+    
+    <canvas id="glCanvas" width="400" height="400"></canvas><br/>
+    <label for="radius">Radius</label>
+    <input oninput="updateChannel('radius', this.value)" name="radius" value="0.25" type="range" min="0.0" max="0.5" step="0.01" /><br/>
+    <label for="stroke">Stroke</label>
+    <input oninput="updateChannel('stroke', this.value)" name="radius" value="0.0" type="range" min="0" max="20" step="0.2" />
+
+    <script>
+        let gl, program;
+
+        const vertexShaderSource = `
+            attribute vec2 position;
+            attribute vec2 uv; // UV coordinates
+            varying vec2 vUV; // Output UV coordinates to fragment shader
+
+            void main() {
+                gl_Position = vec4(position, 0.0, 1.0);
+                vUV = uv; // Pass UV coordinates to fragment shader
+            }
+        `;
+
+        const fragmentShaderSource = `
+            precision mediump float;
+            varying vec2 vUV; // Received UV coordinates from vertex shader
+            uniform float radius;
+            uniform float stroke;
+
+            float circleSdf(in vec2 st, in float r) {
+                return length(st) - r;
+            }
+
+            void main() {
+                vec2 st = vUV;
+                float d = circleSdf(vec2(0.5) - st, radius);
+                float norm_stroke = stroke / 40.;
+
+                if(d < 0.0) {
+                    gl_FragColor = vec4(vec3(1.0), 1.0); // we're inside the circle, draw
+                } else if(stroke > 0.0) {
+                    if(d < norm_stroke) {
+                        gl_FragColor = vec4(vec2(1.0), 0.0, 1.0); // we're outside the cirlce, don't draw unless stroke is enabled
+                    } else {
+                        gl_FragColor = vec4(vec3(0.0), 1.0); // we're outside the cirlce, don't draw unless stroke is enabled    
+                    }
+                } else {
+                    gl_FragColor = vec4(vec3(0.0), 1.0); // we're outside the cirlce, don't draw unless stroke is enabled
+                }
+            }
+        `;
+
+        function updateChannel(key, value) {
+            console.log(`${key} = ${value}`);
+            gl.uniform1f(gl.getUniformLocation(program, key), value);
+        }
+
+        function redraw() {
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            requestAnimationFrame(redraw)
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('glCanvas');
+            gl = canvas.getContext('webgl');
+
+            if (!gl) {
+                alert('WebGL not supported, please use a compatible browser.');
+                return;
+            }
+ 
+            const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+            gl.shaderSource(vertexShader, vertexShaderSource);
+            gl.compileShader(vertexShader);
+
+            const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+            gl.shaderSource(fragmentShader, fragmentShaderSource);
+            gl.compileShader(fragmentShader);
+
+            program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            gl.useProgram(program);
+
+            const positionAttributeLocation = gl.getAttribLocation(program, 'position');
+            const uvAttributeLocation = gl.getAttribLocation(program, 'uv');
+            const positionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            const positions = [
+                -1.0, -1.0, 0.0, 0.0,
+                1.0, -1.0, 1.0, 0.0,
+                -1.0, 1.0, 0.0, 1.0,
+                1.0, 1.0, 1.0, 1.0,
+            ];
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(positionAttributeLocation);
+            gl.enableVertexAttribArray(uvAttributeLocation); // Enable UV attribute
+            gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 4 * Float32Array.BYTES_PER_ELEMENT, 0); 
+            gl.enableVertexAttribArray(uvAttributeLocation); // Enable UV attribute
+            gl.vertexAttribPointer(uvAttributeLocation, 2, gl.FLOAT, false, 4 * Float32Array.BYTES_PER_ELEMENT, 2 * Float32Array.BYTES_PER_ELEMENT);
+            
+            gl.uniform1f(gl.getUniformLocation(program, 'radius'), 0.25);
+            gl.uniform1f(gl.getUniformLocation(program, 'stroke'), 0);
+
+            requestAnimationFrame(redraw);
+        });
+
+    </script>
+</body>
+</html>
