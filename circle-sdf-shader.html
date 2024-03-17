@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SDF Circle</title>
+    <title>SDF Circle (Shader)</title>
     <style>
         body {
             font-family: 'Courier New', Courier, monospace;
@@ -19,13 +19,28 @@
     <label for="radius">Radius</label>
     <input oninput="updateChannel('radius', this.value)" name="radius" value="0.25" type="range" min="0.0" max="0.5" step="0.01" /><br/>
     <label for="stroke">Stroke</label>
-    <input oninput="updateChannel('stroke', this.value)" name="radius" value="0.0" type="range" min="0" max="20" step="0.2" />
+    <input oninput="updateChannel('stroke', this.value)" name="radius" value="0.0" type="range" min="0" max="20" step="0.2" /><br/>
+    
+    <label for="enableAA">Antialias</label>
+    <input name="enableAA" type="checkbox" oninput="updateChannel('antialias', this.checked)" checked />
 
+    <div id="fps"></div>
     <script> 
-        let gl, mainProgram, aaProgram, frameBuffer, canvasTexture, canvasTextureLocation, bufferSDF, bufferAA;
+        let gl, 
+            mainProgram, 
+            aaProgram, 
+            frameBuffer, 
+            canvasTexture, 
+            canvasTextureLocation, 
+            bufferSDF, 
+            bufferAA, 
+            fps = 0;
+        let fpsEl = document.getElementById("fps");
+
         let shader_state = {
             "stroke": 0,
             "radius": 0.25, 
+            "antialias": true
         }
 
         function updateChannel(key, value) { 
@@ -58,6 +73,7 @@
                     varying vec2 vUV; // Received UV coordinates from vertex shader
                     uniform float radius;
                     uniform float stroke;
+                    
 
                     float circleSdf(in vec2 st, in float r) {
                         return length(st) - r;
@@ -69,15 +85,15 @@
                         float norm_stroke = stroke / 40.;
 
                         if(d < 0.0) {
-                            gl_FragColor = vec4(vec3(1.0), 1.0); // we're inside the circle, draw
+                            gl_FragColor = vec4(vec3(0.7), 1.0); // we're inside the circle, draw
                         } else if(stroke > 0.0) {
                             if(d < norm_stroke) {
-                                gl_FragColor = vec4(vec2(1.0), 0.0, 1.0); // we're outside the cirlce, don't draw unless stroke is enabled
+                                gl_FragColor = vec4(vec2(0.0), 0.0, 1.0); // this is the stroke
                             } else {
-                                gl_FragColor = vec4(vec3(0.0), 1.0); // we're outside the cirlce, don't draw unless stroke is enabled    
+                                gl_FragColor = vec4(vec3(1.0), 0.0); // we're outside the cirlce, don't draw unless stroke is enabled    
                             }
                         } else {
-                            gl_FragColor = vec4(vec3(0.0), 1.0); // we're outside the cirlce, don't draw unless stroke is enabled
+                            gl_FragColor = vec4(vec3(1.0), 0.0); // we're outside the cirlce, don't draw unless stroke is enabled
                         }
                     }
                 `;
@@ -129,67 +145,58 @@
                         gl_Position = vec4(position, 0.0, 1.0);
                     }
                 `;
-
-                // const fxaaFragmentShaderSource = `
-                //     precision mediump float;
-                //     uniform vec2 resolution;
-                //     uniform sampler2D inputTexture; 
-                //     varying vec2 vUV;
-
-                //     void main() {
-                //         // @TOOD: FXAA shader code 
-
-                //         gl_FragColor = texture2D(inputTexture, vUV); 
-                //     }
-                // `;
-                
+ 
                 const fxaaFragmentShaderSource = `
                     precision mediump float;
                     uniform vec2 resolution;
                     uniform sampler2D inputTexture; 
                     varying vec2 vUV;
+                    uniform bool antialias;
 
                     void main() {
-                        // Adapted from:
-                        // Timothy Lottes, "Fast Approximate Anti-Aliasing," Game Developer Conference (GDC) 2011.
-                        
-                        vec2 texelSize = 1.0 / resolution;
-                        vec3 rgbNW = texture2D(inputTexture, vUV - vec2(1.0, 1.0) * texelSize).rgb;
-                        vec3 rgbNE = texture2D(inputTexture, vUV - vec2(-1.0, 1.0) * texelSize).rgb;
-                        vec3 rgbSW = texture2D(inputTexture, vUV - vec2(1.0, -1.0) * texelSize).rgb;
-                        vec3 rgbSE = texture2D(inputTexture, vUV - vec2(-1.0, -1.0) * texelSize).rgb;
-                        vec3 rgbM  = texture2D(inputTexture, vUV).rgb;
-
-                        vec3 luma = vec3(0.299, 0.587, 0.114);
-                        float lumaNW = dot(rgbNW, luma);
-                        float lumaNE = dot(rgbNE, luma);
-                        float lumaSW = dot(rgbSW, luma);
-                        float lumaSE = dot(rgbSE, luma);
-                        float lumaM  = dot(rgbM,  luma);
-
-                        float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
-                        float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
-
-                        vec2 dir = vec2(lumaNW + lumaNE - lumaSW - lumaSE, lumaNW + lumaSW - lumaNE - lumaSE);
-
-                        float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * 0.125), 0.0);
-                        float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
-                        dir = min(vec2(8.0, 8.0), max(vec2(-8.0, -8.0), dir * rcpDirMin)) * texelSize;
-
-                        vec3 rgbA = 0.5 * (
-                            texture2D(inputTexture, vUV + dir * (1.0 / 3.0 - 0.5)).rgb +
-                            texture2D(inputTexture, vUV + dir * (2.0 / 3.0 - 0.5)).rgb
-                        );
-                        vec3 rgbB = rgbA * 0.5 + 0.25 * (
-                            texture2D(inputTexture, vUV + dir * -0.5).rgb +
-                            texture2D(inputTexture, vUV + dir * 0.5).rgb
-                        );
-
-                        float lumaB = dot(rgbB, luma);
-                        if (lumaB < lumaMin || lumaB > lumaMax) {
-                            gl_FragColor = vec4(rgbA, 1.0);
+                        if(!antialias) {
+                            gl_FragColor = texture2D(inputTexture, vUV).rgba;
                         } else {
-                            gl_FragColor = vec4(rgbB, 1.0);
+                            // Timothy Lottes, "Fast Approximate Anti-Aliasing," Game Developer Conference (GDC) 2011.
+
+                            vec2 texelSize = 1.0 / resolution;
+                            vec3 rgbNW = texture2D(inputTexture, vUV - vec2(-1.0, 1.0) * texelSize).rgb;
+                            vec3 rgbNE = texture2D(inputTexture, vUV - vec2(1.0, 1.0) * texelSize).rgb;
+                            vec3 rgbSW = texture2D(inputTexture, vUV - vec2(-1.0, -1.0) * texelSize).rgb;
+                            vec3 rgbSE = texture2D(inputTexture, vUV - vec2(1.0, -1.0) * texelSize).rgb;
+                            vec3 rgbM  = texture2D(inputTexture, vUV).rgb;
+
+                            vec3 luma = vec3(0.299, 0.587, 0.114);
+                            float lumaNW = dot(rgbNW, luma);
+                            float lumaNE = dot(rgbNE, luma);
+                            float lumaSW = dot(rgbSW, luma);
+                            float lumaSE = dot(rgbSE, luma);
+                            float lumaM  = dot(rgbM,  luma);
+
+                            float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
+                            float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
+
+                            vec2 dir = vec2(lumaNW + lumaNE - lumaSW - lumaSE, lumaNW + lumaSW - lumaNE - lumaSE);
+
+                            float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * 0.125), 0.0);
+                            float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
+                            dir = min(vec2(8.0, 8.0), max(vec2(-8.0, -8.0), dir * rcpDirMin)) * texelSize;
+
+                            vec3 rgbA = 0.5 * (
+                                texture2D(inputTexture, vUV + dir * (1.0 / 3.0 - 0.5)).rgb +
+                                texture2D(inputTexture, vUV + dir * (2.0 / 3.0 - 0.5)).rgb
+                            );
+                            vec3 rgbB = rgbA * 0.5 + 0.25 * (
+                                texture2D(inputTexture, vUV + dir * -0.5).rgb +
+                                texture2D(inputTexture, vUV + dir * 0.5).rgb
+                            );
+
+                            float lumaB = dot(rgbB, luma);
+                            if (lumaB < lumaMin || lumaB > lumaMax) {
+                                gl_FragColor = vec4(rgbA, 1.0);
+                            } else {
+                                gl_FragColor = vec4(rgbB, 1.0);
+                            }
                         }
                     }
                 `;
@@ -234,26 +241,27 @@
 
                 const positionAttributeLocation = gl.getAttribLocation(aaProgram, 'position');
                 const uvAttributeLocation = gl.getAttribLocation(aaProgram, 'uv');
-
                 var resolutionLocation = gl.getUniformLocation(aaProgram, 'resolution');
 
                 
                 gl.enableVertexAttribArray(positionAttributeLocation);
-                
                 gl.enableVertexAttribArray(uvAttributeLocation); // Enable UV attribute
-
+                
                 gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 4 * Float32Array.BYTES_PER_ELEMENT, 0); 
                 gl.vertexAttribPointer(uvAttributeLocation, 2, gl.FLOAT, false, 4 * Float32Array.BYTES_PER_ELEMENT, 2 * Float32Array.BYTES_PER_ELEMENT);
                 gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
+                gl.uniform1i(gl.getUniformLocation(aaProgram, 'antialias'), true);
             }
 
-            function redraw() {  
+            function redraw() { 
+                let timerStart = window.performance.now();
+
                 // we want to first render to an FB
                 gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
 
                 // Draw the SDF
                 {
-                    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+                    gl.clearColor(1.0, 1.0, 1.0, 1.0);
                     gl.clear(gl.COLOR_BUFFER_BIT);
 
                     gl.useProgram(mainProgram);
@@ -269,12 +277,21 @@
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                     
                     gl.useProgram(aaProgram);
+                    gl.uniform1i(gl.getUniformLocation(aaProgram, "antialias"), shader_state['antialias']);
                     gl.bindBuffer(gl.ARRAY_BUFFER, bufferAA); 
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
                 }
 
+                let timerEnd = window.performance.now();
+                fps = timerEnd - timerStart;
+
                 requestAnimationFrame(redraw)
             }
+            
+            setInterval(() => {
+                if(fps == 0) return; // unrealistic
+                fpsEl.innerHTML = `Rendered in ${ (fps * 1000).toFixed(0) }µs`
+            }, 100);
                        
             setupPassAA();
             setupPassSDF();

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDF Circle (Canvas)</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #canvas {
+            margin:0 auto; 
+        }
+    </style>
+</head>
+<body>
+    
+    <canvas id="canvas" width="400" height="400"></canvas><br/>
+    <label for="radius">Radius</label>
+    <input oninput="updateChannel('radius', this.value)" name="radius" value="0.25" type="range" min="0.0" max="0.5" step="0.01" /><br/>
+    <label for="stroke">Stroke</label>
+    <input oninput="updateChannel('stroke', this.value)" name="radius" value="0.0" type="range" min="0" max="20" step="0.2" /><br/>
+
+    <div id="fps"></div>
+    <script> 
+        let fps = 0;
+        let fpsEl = document.getElementById("fps");
+
+        let shader_state = {
+            "stroke": 0,
+            "radius": 0.25, 
+            "antialias": true
+        }
+
+        function updateChannel(key, value) { 
+            shader_state[key] = value;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => { 
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext("2d");
+            const width = canvas.width;
+            const height = canvas.height;
+            const centerX = width >> 1;
+            const centerY = height >> 1;
+
+            function setupPassSDF() {
+                // Nothing to do
+            }
+
+            function redraw() { 
+                let timerStart = window.performance.now();
+                ctx.clearRect(0, 0, width, height);
+                ctx.beginPath();
+                ctx.fillStyle = "#cccccc";
+                ctx.strokeStyle = "#000000";
+                
+                ctx.arc(centerX, centerY, shader_state["radius"] * width, 0, Math.PI * 2);
+                ctx.fill();
+
+                if(shader_state["stroke"] > 0) {
+                    ctx.lineWidth = shader_state['stroke'];
+                    ctx.stroke();
+                }
+
+                let timerEnd = window.performance.now();
+                fps = timerEnd - timerStart;
+
+                requestAnimationFrame(redraw)
+            }
+            
+            setInterval(() => {
+                if(fps == 0) return; // unrealistic
+                fpsEl.innerHTML = `Rendered in ${ (fps * 1000).toFixed(0) }µs`
+            }, 100);
+            
+            setupPassSDF();
+
+            requestAnimationFrame(redraw);
+        });
+
+    </script>
+</body>
+</html>
