@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life Sim</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: black;
+            color: #ccc;
+        }
+        .wrapper {
+            margin:0 auto;
+            width: 640px;
+            display: flex;
+            flex-direction: column;
+        }
+        .controls {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+        }
+        .controls > * {
+            margin-right: 5px;
+        }
+        .shrink {
+            flex-shrink: 1;
+        }   
+        .grow {
+            flex-grow: 1;;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <div>
+            <canvas id="canvas" width="640" height="640"></canvas>
+        </div>
+        <div class="controls">
+            <button class="shrink">Big Bang!</button>
+            <div id="stats"></div>
+        </div>
+    </div>
+    <script> 
+        function lerp(s,e,t) {
+            return s + (e-s) * t;
+        }
+
+        function colorForCell(e) {
+            const LOW = {
+                r: 0,
+                g: 0,
+                b: 0,
+            }
+
+            const HIGH = {
+                r: 255,
+                g: 255,
+                b: 255,
+            }
+
+            const POINT = e.energy;
+
+            // energy is the intensity. the color is deried from
+            // the simple formula above mapped to the range of LOW -> HIGH
+            const r = lerp(LOW.r, HIGH.r, POINT) * e.energy;
+            const g = lerp(LOW.g, HIGH.g, POINT) * e.energy;
+            const b = lerp(LOW.b, HIGH.b, POINT) * e.energy;
+            const compound = (r << 16) | (g << 8) | b;
+
+            return `#${compound.toString(16).padStart(6, '0')}`;
+        }
+
+        function createRandomCell() {
+            return {
+                energy: Math.random(),
+            }
+        }
+ 
+        /*
+            I often sit and wonder, why did I not just use DIVs with CSS grid to render this...
+            it would have been far simpler. 
+        */
+        const U_WIDTH = 64; // these need to be odd numbered for the grid to work nicely 
+        const U_HEIGHT = 64;
+
+        const uLen = U_HEIGHT * U_WIDTH;
+        const Universe = Array(uLen);
+        for(let i = 0; i < uLen; i++) {
+            Universe[i] = {energy: i / uLen}//createRandomCell();
+        }
+ 
+
+        const stats = document.getElementById("stats");
+
+        document.addEventListener('DOMContentLoaded', () => { 
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext("2d");
+            const width = canvas.width;
+            const height = canvas.height;
+            const centerX = width >> 1;
+            const centerY = height >> 1; 
+
+            const GRID_BG = "#333333";
+            const CELL_BG = "#000000";
+
+            const MARGIN = 1; // 1 pixel margin around cells
+
+            
+            const MARGIN_WIDTH = (U_WIDTH) * MARGIN;
+            const MARGIN_HEIGHT = (U_HEIGHT) * MARGIN;
+
+            const WIDTH_LESS_MARGIN = width - MARGIN_WIDTH;
+            const HEIGHT_LESS_MARGIN = height - MARGIN_HEIGHT;
+
+            const CELL_WIDTH = Math.ceil(WIDTH_LESS_MARGIN / U_WIDTH) - (MARGIN/U_WIDTH);
+            const CELL_HEIGHT = Math.ceil(HEIGHT_LESS_MARGIN / U_HEIGHT) - (MARGIN/U_HEIGHT); 
+
+            const START_X = MARGIN;
+            const START_Y = MARGIN;
+  
+
+            function renderGrid() {
+                let offsetX = 0;
+                let offsetY = 0;
+
+                // ctx.fillStyle = CELL_BG; 
+                const len = U_WIDTH * U_HEIGHT;
+
+                for(let i = 0; i < len; i++) {
+                    const row = Math.floor(i / U_HEIGHT);
+                    const col = i % U_WIDTH;
+
+                    offsetX = MARGIN + col * CELL_WIDTH + (col * MARGIN);
+                    offsetY = MARGIN + row * CELL_HEIGHT + (row * MARGIN);
+
+                    ctx.fillStyle = colorForCell(Universe[i]);
+                    ctx.fillRect(offsetX, offsetY, CELL_WIDTH, CELL_HEIGHT);
+                } 
+            }
+
+            function setup() {
+                stats.innerText = `Universe life ${ (1).toFixed(2) }`;
+                
+                requestAnimationFrame(redraw);
+            }
+
+            function redraw() { 
+                ctx.fillStyle = GRID_BG;
+                ctx.fillRect(0, 0, width, height);
+                
+                renderGrid();
+                
+                setTimeout(() => requestAnimationFrame(redraw), 100);
+            }
+              
+
+            setup();
+        });
+
+    </script>
+</body>
+</html>
