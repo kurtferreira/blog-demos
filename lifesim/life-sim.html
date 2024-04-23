@@ -93,21 +93,20 @@
             },
 
             // calculate the dissipation capability of this cell
-            dissipation_capability(i) { 
+            update_dissipation_capability(i) { 
                 // @TODO: make this a vastly more realistic model
-                return ((this.cells[i].properties[PROP_DISPER] * 
-                            this.cells[i].properties[PROP_SCALE]) / 
-                                this.cells[i].properties[PROP_ABSORB]) 
+                this.cells[i].dissipation = this.cells[i].properties[PROP_DISPER] / this.cells[i].properties[PROP_ABSORB]
  
             },
             // Update the energy value based on this cells dissipation capability
             energy(i) {
                 // Disabling for now, we need to correct the dispersion model to
                 // dampen this a bit
-                // this.cells[i].energy *= Math.min(1, this.dissipation_capability(i))
-                // this.cells[i].energy = Math.min(
-                //     Universe.ENERGY, 
-                //     Math.max(0, this.cells[i].energy));
+                this.cells[i].energy -= this.cells[i].dissipation * Math.sqrt(Universe.ENERGY );
+
+                this.cells[i].energy = Math.min(
+                    Universe.ENERGY, 
+                    Math.max(0, this.cells[i].energy));
             },
             create() {
                 for(let i = 0; i < this.len; i++) {
@@ -117,10 +116,12 @@
                             // Let's assume a high absorbtion since it is a densely packed explosion
                             // and poor dispersion
                             Math.random() * 0.5,     // absorbption
-                            Math.random() * 0.01,    // dispersion,
-                            Math.random() * 5,     // scale
-                        ]
+                            Math.random() * 0.01,    // dispersion
+                        ],
+                        dissipation: 0.0
                     };
+
+                    Universe.update_dissipation_capability(i);
                 }
             },
             color(i) { 
@@ -135,7 +136,7 @@
 
                 // The point will give us the point on the RGB spectrum between our graident.
                 // We use the power value to uniformly set the brightness
-                const POINT = Math.min(1.0, Math.min(1, this.dissipation_capability(i)));
+                const POINT = Math.min(1.0, Math.min(1, this.cells[i].dissipation));
                 const ENERGY_NORM = 0.2 + Math.min(0.8, this.cells[i].energy / this.ENERGY);
 
                 // energy is the intensity. the color is deried from
@@ -243,7 +244,7 @@
                     rgba(${Universe.CELL_HIGH.r}, ${Universe.CELL_HIGH.g},${Universe.CELL_HIGH.b}, 1)
                 )`;
                 
-                setInterval(() => Universe.tick(), 1000);
+                setInterval(() => Universe.tick(), 200);
                 requestAnimationFrame(redraw);
             }
 
