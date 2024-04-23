@@ -20,6 +20,12 @@
             display: flex;
             flex-direction: row;
             align-items: center;
+            user-select: none;
+            pointer-events: none;
+        }
+        .no-touchy {
+            user-select: none;
+            pointer-events: none;
         }
         .controls > * {
             margin-right: 5px;
@@ -34,8 +40,7 @@
             display: block;
             width: 100%;
             height: 32px;
-        }
-
+        } 
     </style>
 </head>
 <body>
@@ -43,19 +48,21 @@
         <div>
             <canvas id="canvas" width="640" height="640"></canvas>
         </div>
-        <div style="display:flex">
+        <div style="display:flex" class="no-touchy">
             <div style="flex-grow:1">Poor dispersion</div>
             <div style="flex-grow:1; text-align: right;">High dispersion</div>
         </div>
-        <div class="spectrum"></div>
+        <div class="spectrum no-touchy"></div>
         <div class="controls">
             <div id="stats"></div>
         </div>
-        Click on the canvas to create "the Big Bang"
+        <div class="no-touchy">
+            Click on the canvas to create "the Big Bang"
+        </div> 
     </div>
     <script> 
-        const U_WIDTH = 5;
-        const U_HEIGHT = 5;
+        const U_WIDTH = 10;
+        const U_HEIGHT = 10;
         const CANVAS_WIDTH = 640;
         const CANVAS_HEIGHT = 640;
         const uLen = U_HEIGHT * U_WIDTH;
@@ -64,13 +71,12 @@
         const PROP_DISPER = 1;
         const PROP_SCALE = 2;
     
-
         function lerp(s,e,t) {
             return s + (e-s) * t;
         }
 
         const Universe = {
-            ENERGY: 1000,
+            ENERGY: 1000,   // An arbitrarily set maximum energy value to normalize against
             len: uLen,
             time: 0,
             cells: Array(uLen),
@@ -87,39 +93,57 @@
             },
 
             // calculate the dissipation capability of this cell
-            dissipation_capability(i) {
-                return ((this.cells[i].properties[PROP_ABSORB] + 
-                        this.cells[i].properties[PROP_DISPER]) / 2) / this.cells[i].properties[PROP_SCALE]
+            dissipation_capability(i) { 
+                // @TODO: make this a vastly more realistic model
+                return ((this.cells[i].properties[PROP_DISPER] * 
+                            this.cells[i].properties[PROP_SCALE]) / 
+                                this.cells[i].properties[PROP_ABSORB]) 
  
             },
             // Update the energy value based on this cells dissipation capability
             energy(i) {
-                this.cells[i].energy *= this.dissipation_capability(i)
+                // Disabling for now, we need to correct the dispersion model to
+                // dampen this a bit
+                // this.cells[i].energy *= Math.min(1, this.dissipation_capability(i))
+                // this.cells[i].energy = Math.min(
+                //     Universe.ENERGY, 
+                //     Math.max(0, this.cells[i].energy));
             },
             create() {
                 for(let i = 0; i < this.len; i++) {
                     this.cells[i] = {
                         energy: 0.00,   // start with very low energy
                         properties: [
-                            Math.random() * 0.24,    // absorbption
-                            Math.random() * 0.84,    // dispersion,
-                            1 + Math.random() * 10,     // scale
+                            // Let's assume a high absorbtion since it is a densely packed explosion
+                            // and poor dispersion
+                            Math.random() * 0.5,     // absorbption
+                            Math.random() * 0.01,    // dispersion,
+                            Math.random() * 5,     // scale
                         ]
                     };
                 }
             },
             color(i) { 
+                /*
+
+                    We want the energy to be capped a tthe highest colour tone 
+                    and slightly dim with less energy.
+
+                */
                 const HIGH = this.CELL_HIGH;
                 const LOW = this.CELL_LOW;
 
+                // The point will give us the point on the RGB spectrum between our graident.
+                // We use the power value to uniformly set the brightness
                 const POINT = Math.min(1.0, Math.min(1, this.dissipation_capability(i)));
+                const ENERGY_NORM = 0.2 + Math.min(0.8, this.cells[i].energy / this.ENERGY);
 
                 // energy is the intensity. the color is deried from
                 // the simple formula above mapped to the range of LOW -> HIGH
-                const r = lerp(LOW.r, HIGH.r, POINT) * this.cells[i].energy;
-                const g = lerp(LOW.g, HIGH.g, POINT) * this.cells[i].energy;
-                const b = lerp(LOW.b, HIGH.b, POINT) * this.cells[i].energy;
-                const compound = (r << 16) | (255, g << 8) | b;
+                const r = lerp(LOW.r, HIGH.r, POINT) * (ENERGY_NORM);
+                const g = lerp(LOW.g, HIGH.g, POINT) * (ENERGY_NORM);
+                const b = lerp(LOW.b, HIGH.b, POINT) * (ENERGY_NORM);
+                let compound = (r << 16) | (255, g << 8) | b;
 
                 return `#${compound.toString(16).padStart(6, '0')}`;
             },
@@ -129,15 +153,14 @@
                 const row = Math.ceil((y / CANVAS_HEIGHT) * U_HEIGHT) - 1;
                 const index = col + (row * U_WIDTH);
                 
-                console.log(`BURSTING AT ${col},${row} with ${this.ENERGY}`);
-
-                this.cells[index].energy = this.ENERGY;
+                this.cells[index].energy = this.ENERGY ^ 2;
             },
 
             tick() {
                 for(let i = 0; i < this.cells.length; i++) {
-                    // Evolve
+                    // @TODO: Evolve
 
+                    // @TODO: Cost function
 
                     // Update the energy value of this cell
                     this.energy(i)
@@ -153,10 +176,10 @@
         */ 
  
         const stats = document.getElementById("stats");
+        const canvas = document.getElementById('canvas');
+        const spectrum = document.querySelector('.spectrum');
 
         document.addEventListener('DOMContentLoaded', () => { 
-            const canvas = document.getElementById('canvas');
-            const spectrum = document.querySelector('.spectrum');
             canvas.width = CANVAS_WIDTH;
             canvas.height = CANVAS_HEIGHT;
             canvas.addEventListener("click", (e) => {
