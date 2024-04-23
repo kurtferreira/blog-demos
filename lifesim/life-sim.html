@@ -61,8 +61,8 @@
         </div> 
     </div>
     <script> 
-        const U_WIDTH = 10;
-        const U_HEIGHT = 10;
+        const U_WIDTH = 5;
+        const U_HEIGHT = 5;
         const CANVAS_WIDTH = 640;
         const CANVAS_HEIGHT = 640;
         const uLen = U_HEIGHT * U_WIDTH;
@@ -73,6 +73,29 @@
     
         function lerp(s,e,t) {
             return s + (e-s) * t;
+        }
+
+        function getNeighbors(grid, rowIndex, colIndex, numRows, numCols) {
+            const index = rowIndex * numCols + colIndex;
+            const neighbors = [];
+
+            // Check top left neighbor
+            rowIndex > 0 && colIndex > 0 && neighbors.push(grid[index - numCols - 1]);
+            // Check top center neighbor
+            rowIndex > 0 && neighbors.push(grid[index - numCols]);
+            // Check top right neighbor
+            rowIndex > 0 && colIndex < numCols - 1 && neighbors.push(grid[index - numCols + 1]);
+            // Check mid left neighbor
+            colIndex > 0 && neighbors.push(grid[index - 1]);
+            // Check mid right neighbor
+            colIndex < numCols - 1 && neighbors.push(grid[index + 1]);
+            // Check bottom left neighbor
+            rowIndex < numRows - 1 && colIndex > 0 && neighbors.push(grid[index + numCols - 1]);
+            // Check bottom center neighbor
+            rowIndex < numRows - 1 && neighbors.push(grid[index + numCols]);
+            // Check bottom right neighbor
+            rowIndex < numRows - 1 && colIndex < numCols - 1 && neighbors.push(grid[index + numCols + 1]);
+            return neighbors;
         }
 
         const Universe = {
@@ -92,17 +115,20 @@
                 b: 0,
             },
 
+            energy_reduction(dissipation) {
+                return dissipation * Math.sqrt(Universe.ENERGY)
+            },
+
             // calculate the dissipation capability of this cell
             update_dissipation_capability(i) { 
                 // @TODO: make this a vastly more realistic model
                 this.cells[i].dissipation = this.cells[i].properties[PROP_DISPER] / this.cells[i].properties[PROP_ABSORB]
- 
             },
             // Update the energy value based on this cells dissipation capability
             energy(i) {
                 // Disabling for now, we need to correct the dispersion model to
                 // dampen this a bit
-                this.cells[i].energy -= this.cells[i].dissipation * Math.sqrt(Universe.ENERGY );
+                this.cells[i].energy /= Math.sqrt(Universe.energy_reduction(this.cells[i].dissipation));
 
                 this.cells[i].energy = Math.min(
                     Universe.ENERGY, 
@@ -159,16 +185,28 @@
 
             tick() {
                 for(let i = 0; i < this.cells.length; i++) {
+                    const col = i % U_WIDTH;
+                    const row = Math.floor(i / U_WIDTH);
                     // @TODO: Evolve
+                    // @TODO: update_dissipation_capability after to ensure we have captured this
 
-                    // @TODO: Cost function
-
+                    
                     // Update the energy value of this cell
-                    this.energy(i)
+                    this.energy(i);
+                    
+                    let neighbors = getNeighbors(Universe.cells, row, col, U_HEIGHT, U_WIDTH);
+                    let reduction = Universe.energy_reduction(i);
+
+                    for(cell of neighbors) { 
+                        // cell.energy += (this.cells[i].energy * cell.dissipation) / neighbors.length;
+                        // cell.energy *= 1 + (reduction / cell.dissipation);
+                        // cell.energy += reduction;
+                        // cell.energy = Math.max(0, cell.energy);
+                    }  
                 }
 
                 this.time += 0.1;
-            }
+            }, 
         }
   
         /*
@@ -228,11 +266,11 @@
                     ctx.fillStyle = Universe.color(i);
                     ctx.fillRect(offsetX, offsetY, CELL_WIDTH, CELL_HEIGHT);
 
-                    
+                    ctx.font = "8px monospace";
                     ctx.fillStyle = "#ffffff";
-                    ctx.fillText(Universe.cells[i].energy.toFixed(3), 
-                        offsetX + 10, 
-                        offsetY + 20
+                    ctx.fillText(Universe.cells[i].energy.toFixed(2), 
+                        offsetX + 4, 
+                        offsetY + 10
                     )
                 } 
             }
