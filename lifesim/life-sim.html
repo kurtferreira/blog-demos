@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Life Sim</title>
+    <script src="//unpkg.com/brain.js"></script>
     <style>
         body {
             font-family: 'Courier New', Courier, monospace;
@@ -61,8 +62,8 @@
         </div> 
     </div>
     <script> 
-        const U_WIDTH = 10;
-        const U_HEIGHT = 10;
+        const U_WIDTH = 5;
+        const U_HEIGHT = 5;
         const CANVAS_WIDTH = 640;
         const CANVAS_HEIGHT = 640;
         const uLen = U_HEIGHT * U_WIDTH;
@@ -128,12 +129,17 @@
                 this.cells[i].energy *= 1 - disperse;
                 this.cells[i].energy = Math.min(Universe.ENERGY, Math.max(0, this.cells[i].energy));
 
+                const delta = (oldEnergy - this.cells[i].energy);
+
                 // disperse this energy to the neighbors
                 let neighbors = getNeighbors(Universe.cells, row, col, U_HEIGHT, U_WIDTH);
-                let to_disperse = neighbors.length > 0 ? (oldEnergy - this.cells[i].energy) / neighbors.length : 0;
+                let to_disperse = neighbors.length > 0 ? delta / neighbors.length : 0;
                 for(cell of neighbors) { 
                     cell.energy += to_disperse;
-                } 
+                }  
+
+                // normalize the delta 
+                return delta / Universe.ENERGY;
             },
             create() {
                 for(let i = 0; i < this.len; i++) {
@@ -145,7 +151,9 @@
                             Math.random() * 0.5,     // absorbption
                             Math.random() * 0.01,    // dispersion
                         ],
-                        dissipation: 0.0
+                        dissipation: 0.0,
+                        net: new brain.NeuralNetwork(), // shunt this to a webworker?
+                        act: {}
                     };
 
                     Universe.update_dissipation_capability(i);
@@ -186,12 +194,19 @@
 
             tick() {
                 for(let i = 0; i < this.cells.length; i++) { 
+                    // Update the energy value of this cell
+                    let reward = this.energy(i);
+
+                    // Train on what happened
+                    this.cells[i].net.train([{
+                        input: this.cells[i].properties,
+                        output: [reward]
+                    }])
+
                     // @TODO: Evolve
                     // @TODO: update_dissipation_capability after to ensure we have captured this
-
-                    
-                    // Update the energy value of this cell
-                    this.energy(i);  
+                    this.cells[i].act = this.cells[0].net.run(this.cells[0].properties);
+                    this.cells[i].properties.map((c, i) => c * this.cells[i].act[i])
                 }
 
                 this.time += 0.1;
@@ -275,7 +290,7 @@
                     rgba(${Universe.CELL_HIGH.r}, ${Universe.CELL_HIGH.g},${Universe.CELL_HIGH.b}, 1)
                 )`;
                 
-                setInterval(() => Universe.tick(), 200);
+                setInterval(() => Universe.tick(), 300);
                 requestAnimationFrame(redraw);
             }
 
