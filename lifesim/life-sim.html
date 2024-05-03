@@ -61,8 +61,8 @@
         </div> 
     </div>
     <script> 
-        const U_WIDTH = 5;
-        const U_HEIGHT = 5;
+        const U_WIDTH = 10;
+        const U_HEIGHT = 10;
         const CANVAS_WIDTH = 640;
         const CANVAS_HEIGHT = 640;
         const uLen = U_HEIGHT * U_WIDTH;
@@ -115,24 +115,25 @@
                 b: 0,
             },
 
-            energy_reduction(dissipation) {
-                return dissipation * Math.sqrt(Universe.ENERGY)
-            },
-
-            // calculate the dissipation capability of this cell
             update_dissipation_capability(i) { 
-                // @TODO: make this a vastly more realistic model
                 this.cells[i].dissipation = this.cells[i].properties[PROP_DISPER] / this.cells[i].properties[PROP_ABSORB]
             },
-            // Update the energy value based on this cells dissipation capability
+            
             energy(i) {
-                // Disabling for now, we need to correct the dispersion model to
-                // dampen this a bit
-                this.cells[i].energy /= Math.sqrt(Universe.energy_reduction(this.cells[i].dissipation));
+                const col = i % U_WIDTH;
+                const row = Math.floor(i / U_WIDTH);
 
-                this.cells[i].energy = Math.min(
-                    Universe.ENERGY, 
-                    Math.max(0, this.cells[i].energy));
+                const disperse = this.cells[i].dissipation / 9.8;
+                const oldEnergy = this.cells[i].energy;
+                this.cells[i].energy *= 1 - disperse;
+                this.cells[i].energy = Math.min(Universe.ENERGY, Math.max(0, this.cells[i].energy));
+
+                // disperse this energy to the neighbors
+                let neighbors = getNeighbors(Universe.cells, row, col, U_HEIGHT, U_WIDTH);
+                let to_disperse = neighbors.length > 0 ? (oldEnergy - this.cells[i].energy) / neighbors.length : 0;
+                for(cell of neighbors) { 
+                    cell.energy += to_disperse;
+                } 
             },
             create() {
                 for(let i = 0; i < this.len; i++) {
@@ -184,25 +185,13 @@
             },
 
             tick() {
-                for(let i = 0; i < this.cells.length; i++) {
-                    const col = i % U_WIDTH;
-                    const row = Math.floor(i / U_WIDTH);
+                for(let i = 0; i < this.cells.length; i++) { 
                     // @TODO: Evolve
                     // @TODO: update_dissipation_capability after to ensure we have captured this
 
                     
                     // Update the energy value of this cell
-                    this.energy(i);
-                    
-                    let neighbors = getNeighbors(Universe.cells, row, col, U_HEIGHT, U_WIDTH);
-                    let reduction = Universe.energy_reduction(i);
-
-                    for(cell of neighbors) { 
-                        // cell.energy += (this.cells[i].energy * cell.dissipation) / neighbors.length;
-                        // cell.energy *= 1 + (reduction / cell.dissipation);
-                        // cell.energy += reduction;
-                        // cell.energy = Math.max(0, cell.energy);
-                    }  
+                    this.energy(i);  
                 }
 
                 this.time += 0.1;
@@ -266,11 +255,15 @@
                     ctx.fillStyle = Universe.color(i);
                     ctx.fillRect(offsetX, offsetY, CELL_WIDTH, CELL_HEIGHT);
 
-                    ctx.font = "8px monospace";
+                    ctx.font = "10px monospace";
                     ctx.fillStyle = "#ffffff";
                     ctx.fillText(Universe.cells[i].energy.toFixed(2), 
                         offsetX + 4, 
                         offsetY + 10
+                    )
+                    ctx.fillText(Universe.cells[i].dissipation.toFixed(4), 
+                        offsetX + 4, 
+                        offsetY + 30
                     )
                 } 
             }
